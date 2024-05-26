@@ -61,6 +61,16 @@ class UserController {
             return;
         }
 
+        if (!self::isValidDomainExtension($data->email)) {
+            Flight::json(['error' => 'Invalid email domain extension'], 400);
+            return;
+        }
+
+        if (!self::hasValidMXRecords($data->email)) {
+            Flight::json(['error' => 'Email domain does not have valid MX records'], 400);
+            return;
+        }
+
         if (!self::isValidPhoneNumber($data->phone_number)) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
@@ -76,6 +86,32 @@ class UserController {
         self::sendConfirmationEmail($data->email, $userId);
 
         Flight::json(['message' => 'Registration successful! Please check your email to verify your account.']);
+    }
+
+    /**
+     * Check if the email domain extension is valid.
+     *
+     * @param string $email The email address to check.
+     * @return bool True if the domain extension is valid, false otherwise.
+     */
+    private static function isValidDomainExtension($email) {
+        $domain = explode('@', $email)[1];
+        $extension = explode('.', $domain);
+        $tld = array_pop($extension);
+
+        $tldList = file('https://data.iana.org/TLD/tlds-alpha-by-domain.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        return in_array(strtoupper($tld), $tldList);
+    }
+
+    /**
+     * Check if the email domain has valid MX records.
+     *
+     * @param string $email The email address to check.
+     * @return bool True if the domain has valid MX records, false otherwise.
+     */
+    private static function hasValidMXRecords($email) {
+        $domain = explode('@', $email)[1];
+        return checkdnsrr($domain, 'MX');
     }
 
     /**
