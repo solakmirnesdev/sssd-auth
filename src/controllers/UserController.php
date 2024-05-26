@@ -27,62 +27,51 @@ class UserController {
     public static function register() {
         $data = Flight::request()->data;
 
-        // Validate full name
         if (empty($data->full_name)) {
             Flight::json(['error' => 'Full name is required'], 400);
             return;
         }
 
-        // Validate username
         if (empty($data->username) || strlen($data->username) <= 3 || !ctype_alnum($data->username)) {
             Flight::json(['error' => 'Invalid username'], 400);
             return;
         }
 
-        // Check for reserved usernames
         $reservedNames = ['admin', 'root', 'system'];
         if (in_array(strtolower($data->username), $reservedNames)) {
             Flight::json(['error' => 'Username is reserved'], 400);
             return;
         }
 
-        // Validate password
         if (empty($data->password) || strlen($data->password) < 8) {
             Flight::json(['error' => 'Password must be at least 8 characters long'], 400);
             return;
         }
 
-        // Check if password has been pwned
         if (self::isPasswordPwned($data->password)) {
             Flight::json(['error' => 'Password has been compromised in a data breach'], 400);
             return;
         }
 
-        // Validate email
         if (!filter_var($data->email, FILTER_VALIDATE_EMAIL)) {
             Flight::json(['error' => 'Invalid email address'], 400);
             return;
         }
 
-        // Validate phone number
         if (!self::isValidPhoneNumber($data->phone_number)) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
         }
 
-        // Check if username or email already exists
         if (User::findByUsernameOrEmail($data->username, $data->email)) {
             Flight::json(['error' => 'Username or email already exists'], 400);
             return;
         }
 
-        // Create the new user
         $userId = User::create($data->full_name, $data->username, $data->password, $data->email, $data->phone_number);
 
-        // Send confirmation email
         self::sendConfirmationEmail($data->email, $userId);
 
-        // Respond with success message
         Flight::json(['message' => 'Registration successful! Please check your email to verify your account.']);
     }
 
@@ -307,7 +296,23 @@ class UserController {
      * @return bool True if the password has been pwned, false otherwise.
      */
     private static function isPasswordPwned($password) {
-        // Placeholder implementation, replace with actual API call
+        // Hash the password using SHA-1
+        $sha1Password = sha1($password);
+        $prefix = substr($sha1Password, 0, 5);
+        $suffix = substr($sha1Password, 5);
+
+        // Make the API request to HIBP
+        $url = "https://api.pwnedpasswords.com/range/$prefix";
+        $response = file_get_contents($url);
+
+        // Check if the suffix appears in the response
+        $lines = explode("\n", $response);
+        foreach ($lines as $line) {
+            list($hashSuffix, $count) = explode(":", $line);
+            if (strcasecmp($hashSuffix, $suffix) === 0) {
+                return true;
+            }
+        }
         return false;
     }
 
