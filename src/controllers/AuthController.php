@@ -4,19 +4,15 @@ namespace Solakmirnes\SssdAuth\Controllers;
 
 use Flight;
 use Solakmirnes\SssdAuth\Models\User;
-use Solakmirnes\SssdAuth\Database;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
-use libphonenumber\PhoneNumberUtil;
-use libphonenumber\PhoneNumberFormat;
-use libphonenumber\NumberParseException;
 
 /**
- * UserController class for managing user-related actions.
+ * AuthController class for managing authentication-related actions.
  */
-class UserController {
+class AuthController {
 
     /**
      * Handle user registration.
@@ -30,88 +26,75 @@ class UserController {
     public static function register() {
         $data = Flight::request()->data;
 
+        // Validate full name
         if (empty($data->full_name)) {
             Flight::json(['error' => 'Full name is required'], 400);
             return;
         }
 
+        // Validate username
         if (empty($data->username) || strlen($data->username) <= 3 || !ctype_alnum($data->username)) {
             Flight::json(['error' => 'Invalid username'], 400);
             return;
         }
 
+        // Check for reserved usernames
         $reservedNames = ['admin', 'root', 'system'];
         if (in_array(strtolower($data->username), $reservedNames)) {
             Flight::json(['error' => 'Username is reserved'], 400);
             return;
         }
 
+        // Validate password
         if (empty($data->password) || strlen($data->password) < 8) {
             Flight::json(['error' => 'Password must be at least 8 characters long'], 400);
             return;
         }
 
-        if (self::isPasswordPwned($data->password)) {
+        // Check if the password has been compromised in a data breach
+        if (ValidationController::isPasswordPwned($data->password)) {
             Flight::json(['error' => 'Password has been compromised in a data breach'], 400);
             return;
         }
 
+        // Validate email
         if (!filter_var($data->email, FILTER_VALIDATE_EMAIL)) {
             Flight::json(['error' => 'Invalid email address'], 400);
             return;
         }
 
-        if (!self::isValidDomainExtension($data->email)) {
+        // Check if the email domain extension is valid
+        if (!ValidationController::isValidDomainExtension($data->email)) {
             Flight::json(['error' => 'Invalid email domain extension'], 400);
             return;
         }
 
-        if (!self::hasValidMXRecords($data->email)) {
+        // Check if the email domain has valid MX records
+        if (!ValidationController::hasValidMXRecords($data->email)) {
             Flight::json(['error' => 'Email domain does not have valid MX records'], 400);
             return;
         }
 
-        if (!self::isValidPhoneNumber($data->phone_number)) {
+        // Validate phone number
+        if (!ValidationController::isValidPhoneNumber($data->phone_number)) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
         }
 
+        // Check if the username or email already exists in the database
         if (User::findByUsernameOrEmail($data->username, $data->email)) {
             Flight::json(['error' => 'Username or email already exists'], 400);
             return;
         }
 
+        // Create a new user in the database
         $userId = User::create($data->full_name, $data->username, $data->password, $data->email, $data->phone_number);
 
-        self::sendConfirmationEmail($data->email, $userId);
+        // Send a confirmation email to the user
+        EmailController::sendConfirmationEmail($data->email, $userId);
 
+        // Respond with a success message
         Flight::json(['message' => 'Registration successful! Please check your email to verify your account.']);
-    }
-
-    /**
-     * Check if the email domain extension is valid.
-     *
-     * @param string $email The email address to check.
-     * @return bool True if the domain extension is valid, false otherwise.
-     */
-    private static function isValidDomainExtension($email) {
-        $domain = explode('@', $email)[1];
-        $extension = explode('.', $domain);
-        $tld = array_pop($extension);
-
-        $tldList = file('https://data.iana.org/TLD/tlds-alpha-by-domain.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        return in_array(strtoupper($tld), $tldList);
-    }
-
-    /**
-     * Check if the email domain has valid MX records.
-     *
-     * @param string $email The email address to check.
-     * @return bool True if the domain has valid MX records, false otherwise.
-     */
-    private static function hasValidMXRecords($email) {
-        $domain = explode('@', $email)[1];
-        return checkdnsrr($domain, 'MX');
     }
 
     /**
@@ -228,43 +211,10 @@ class UserController {
         User::savePasswordResetToken($user['id'], $resetToken, $expiryTime);
 
         // Send password reset email
-        self::sendPasswordResetEmail($data->email, $resetToken);
+        EmailController::sendPasswordResetEmail($data->email, $resetToken);
 
         // Respond with success message
         Flight::json(['message' => 'Password reset email sent']);
-    }
-
-    /**
-     * Send a password reset email to the user.
-     *
-     * This method sends an email containing a password reset link to the user's email address.
-     *
-     * @param string $email The user's email address.
-     * @param string $token The password reset token.
-     * @return void
-     */
-    private static function sendPasswordResetEmail($email, $token) {
-        $mail = new PHPMailer(true);
-        try {
-            $mail->isSMTP();
-            $mail->Host = SMTP_HOST;
-            $mail->SMTPAuth = true;
-            $mail->Username = SMTP_USERNAME;
-            $mail->Password = SMTP_PASSWORD;
-            $mail->SMTPSecure = SMTP_ENCRYPTION;
-            $mail->Port = SMTP_PORT;
-
-            $mail->setFrom('no-reply@example.com', 'Mailer');
-            $mail->addAddress($email);
-
-            $mail->isHTML(true);
-            $mail->Subject = 'Password Reset';
-            $mail->Body    = "Click the following link to reset your password: <a href='http://localhost:8000/reset-password?token=$token'>Reset Password</a>";
-
-            $mail->send();
-        } catch (Exception $e) {
-            error_log("Message could not be sent. Mailer Error: {$mail->ErrorInfo}");
-        }
     }
 
     /**
@@ -323,88 +273,5 @@ class UserController {
             <input type='password' name='new_password' id='new_password' required>
             <button type='submit'>Reset Password</button>
           </form>";
-    }
-
-    /**
-     * Check if a password has been pwned using the Have I Been Pwned API.
-     *
-     * This method sends the first 5 characters of the SHA-1 hash of the password
-     * to the Have I Been Pwned API and checks if the password has been found in a data breach.
-     *
-     * @param string $password The password to check.
-     * @return bool True if the password has been pwned, false otherwise.
-     */
-    private static function isPasswordPwned($password) {
-        // Hash the password using SHA-1
-        $sha1Password = sha1($password);
-        $prefix = substr($sha1Password, 0, 5);
-        $suffix = substr($sha1Password, 5);
-
-        // Make the API request to HIBP
-        $url = "https://api.pwnedpasswords.com/range/$prefix";
-        $response = file_get_contents($url);
-
-        // Check if the suffix appears in the response
-        $lines = explode("\n", $response);
-        foreach ($lines as $line) {
-            list($hashSuffix, $count) = explode(":", $line);
-            if (strcasecmp($hashSuffix, $suffix) === 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Validate a phone number using the Google libphonenumber library.
-     *
-     * This method validates the format of the phone number to ensure it is a valid
-     * mobile number.
-     *
-     * @param string $phoneNumber The phone number to validate.
-     * @return bool True if the phone number is valid, false otherwise.
-     */
-    private static function isValidPhoneNumber($phoneNumber) {
-        $phoneUtil = PhoneNumberUtil::getInstance();
-        try {
-            $numberProto = $phoneUtil->parse($phoneNumber, "BA"); // For Bosnia
-            return $phoneUtil->isValidNumber($numberProto);
-        } catch (NumberParseException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * Send a confirmation email to the user.
-     *
-     * This method sends an email containing a verification link to the user's email address.
-     *
-     * @param string $email The user's email address.
-     * @param int $userId The user's ID.
-     * @return void
-     */
-    private static function sendConfirmationEmail($email, $userId) {
-        $mail = new PHPMailer(true);
-        try {
-            $mail->isSMTP();
-            $mail->Host = SMTP_HOST;
-            $mail->SMTPAuth = true;
-            $mail->Username = SMTP_USERNAME;
-            $mail->Password = SMTP_PASSWORD;
-            $mail->SMTPSecure = SMTP_ENCRYPTION;
-            $mail->Port = SMTP_PORT;
-
-            $mail->setFrom('no-reply@example.com', 'Mailer');
-            $mail->addAddress($email);
-
-            $mail->isHTML(true);
-            $mail->Subject = 'Email Verification';
-            $verificationUrl = 'http://localhost:8000/verify?user=' . $userId;
-            $mail->Body    = "Please click on the following link to verify your email: <a href='$verificationUrl'>Verify Email</a>";
-
-            $mail->send();
-        } catch (Exception $e) {
-            error_log("Message could not be sent. Mailer Error: {$mail->ErrorInfo}");
-        }
     }
 }
