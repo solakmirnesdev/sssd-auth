@@ -9,6 +9,9 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use libphonenumber\PhoneNumberUtil;
+use libphonenumber\PhoneNumberFormat;
+use libphonenumber\NumberParseException;
 
 /**
  * UserController class for managing user-related actions.
@@ -326,8 +329,13 @@ class UserController {
      * @return bool True if the phone number is valid, false otherwise.
      */
     private static function isValidPhoneNumber($phoneNumber) {
-        // Placeholder implementation, replace with actual validation
-        return true;
+        $phoneUtil = PhoneNumberUtil::getInstance();
+        try {
+            $numberProto = $phoneUtil->parse($phoneNumber, "BA"); // For Bosnia
+            return $phoneUtil->isValidNumber($numberProto);
+        } catch (NumberParseException $e) {
+            return false;
+        }
     }
 
     /**
