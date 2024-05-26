@@ -1,9 +1,24 @@
 <?php
 
+require '../vendor/autoload.php'; // Autoload composer dependencies
+
+// Include JWT Auth middleware only once
+require_once '../middlewares/jwtAuth.php'; // Include the middleware file
+
+/**
+ * Map the JWT authentication middleware.
+ *
+ * This maps the 'jwtAuth' middleware function to Flight,
+ * making it available for route protection.
+ */
+Flight::map('jwtAuth', 'jwtAuth');
+
 /**
  * Root route.
  *
  * This route displays a welcome message when the root URL is accessed.
+ *
+ * @route GET /
  */
 Flight::route('GET /', function(){
     echo 'Welcome to my App!';
@@ -37,22 +52,13 @@ Flight::route('POST /login', ['Solakmirnes\SssdAuth\Controllers\UserController',
 Flight::route('GET /verify', ['Solakmirnes\SssdAuth\Controllers\UserController', 'verifyEmail']);
 
 /**
- * Password reset request route.
+ * Forgot password route.
  *
  * This route handles password reset requests. It calls the `forgotPassword` method in the `UserController`.
  *
  * @route POST /forgot-password
  */
 Flight::route('POST /forgot-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'forgotPassword']);
-
-/**
- * Password reset route.
- *
- * This route handles password resets. It calls the `resetPassword` method in the `UserController`.
- *
- * @route POST /reset-password
- */
-Flight::route('POST /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'resetPassword']);
 
 /**
  * Password reset form route.
@@ -62,3 +68,33 @@ Flight::route('POST /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserCon
  * @route GET /reset-password
  */
 Flight::route('GET /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'showResetForm']);
+
+/**
+ * Password reset route.
+ *
+ * This route handles password reset submissions. It calls the `resetPassword` method in the `UserController`.
+ *
+ * @route POST /reset-password
+ */
+Flight::route('POST /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'resetPassword']);
+
+/**
+ * Example of a protected route.
+ *
+ * This route is an example of a protected route that requires JWT authentication.
+ * It calls the `jwtAuth` middleware to verify the token before allowing access.
+ *
+ * @route GET /protected
+ */
+Flight::route('GET /protected', function() {
+    if (Flight::jwtAuth()) {
+        Flight::json(['message' => 'You have accessed a protected route']);
+    }
+});
+
+/**
+ * Start the Flight PHP application.
+ *
+ * This starts the Flight PHP application, making it ready to handle requests.
+ */
+Flight::start();

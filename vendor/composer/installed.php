@@ -3,13 +3,22 @@
         'name' => 'solakmirnes/sssd-auth',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => '6811c7e7cb22629626ff5bfb048fdf1dba5b6cd0',
+        'reference' => 'e5c424e7ffb4cf012e6f4db42193bc7037fe26f1',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
         'dev' => true,
     ),
     'versions' => array(
+        'firebase/php-jwt' => array(
+            'pretty_version' => 'v6.10.1',
+            'version' => '6.10.1.0',
+            'reference' => '500501c2ce893c824c801da135d02661199f60c5',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../firebase/php-jwt',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'mikecao/flight' => array(
             'pretty_version' => 'v3.9.0',
             'version' => '3.9.0.0',
@@ -31,7 +40,7 @@
         'solakmirnes/sssd-auth' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => '6811c7e7cb22629626ff5bfb048fdf1dba5b6cd0',
+            'reference' => 'e5c424e7ffb4cf012e6f4db42193bc7037fe26f1',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

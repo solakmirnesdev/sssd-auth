@@ -6,6 +6,9 @@ use PDO;
 
 /**
  * Database class for managing the database connection.
+ *
+ * This class implements the singleton pattern to ensure that only one instance
+ * of the database connection exists. It uses PDO for database interactions.
  */
 class Database {
     /**
@@ -21,13 +24,14 @@ class Database {
     /**
      * Database constructor.
      *
-     * Initializes the database connection using the provided credentials.
+     * Initializes the database connection using the provided credentials
+     * from the configuration constants.
      */
     private function __construct() {
-        $host = 'localhost';
-        $db = 'sssd_auth';
-        $user = 'root';
-        $pass = 'Supermar!o1';
+        $host = DB_HOST;
+        $db = DB_NAME;
+        $user = DB_USERNAME;
+        $pass = DB_PASSWORD;
         $charset = 'utf8mb4';
 
         $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -47,6 +51,9 @@ class Database {
     /**
      * Get the singleton instance of the Database class.
      *
+     * This method ensures that only one instance of the Database class exists.
+     * It creates the instance if it doesn't already exist and returns it.
+     *
      * @return Database The singleton instance of the Database class.
      */
     public static function getInstance() {
@@ -58,6 +65,8 @@ class Database {
 
     /**
      * Get the PDO connection.
+     *
+     * This method returns the PDO instance for the database connection.
      *
      * @return PDO The PDO connection instance.
      */
