@@ -4,10 +4,25 @@ namespace Solakmirnes\SssdAuth;
 
 use PDO;
 
+/**
+ * Database class for managing the database connection.
+ */
 class Database {
+    /**
+     * @var Database|null Singleton instance of the Database class.
+     */
     private static $instance = null;
+
+    /**
+     * @var PDO The PDO instance for the database connection.
+     */
     private $pdo;
 
+    /**
+     * Database constructor.
+     *
+     * Initializes the database connection using the provided credentials.
+     */
     private function __construct() {
         $host = 'localhost';
         $db = 'sssd_auth';
@@ -29,6 +44,11 @@ class Database {
         }
     }
 
+    /**
+     * Get the singleton instance of the Database class.
+     *
+     * @return Database The singleton instance of the Database class.
+     */
     public static function getInstance() {
         if (!self::$instance) {
             self::$instance = new self();
@@ -36,6 +56,11 @@ class Database {
         return self::$instance;
     }
 
+    /**
+     * Get the PDO connection.
+     *
+     * @return PDO The PDO connection instance.
+     */
     public function getConnection() {
         return $this->pdo;
     }
