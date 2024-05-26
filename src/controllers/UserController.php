@@ -4,6 +4,9 @@ namespace Solakmirnes\SssdAuth\Controllers;
 
 use Flight;
 use Solakmirnes\SssdAuth\Models\User;
+use Solakmirnes\SssdAuth\Database;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 class UserController {
     public static function register() {
@@ -65,5 +68,39 @@ class UserController {
     }
 
     private static function sendConfirmationEmail($email, $userId) {
+        $mail = new PHPMailer(true);
+        try {
+            // Server settings for mailtrap
+            $mail->isSMTP();
+            $mail->Host = 'sandbox.smtp.mailtrap.io';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'cb215d12ba5592';
+            $mail->Password = '2d778308ff5ab9';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 2525;
+
+            // Recipients
+            $mail->setFrom('no-reply@example.com', 'Mailer');
+            $mail->addAddress($email);
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = 'Email Verification';
+            $mail->Body    = "Please click on the following link to verify your email: <a href='http://localhost:8000/verify?user=$userId'>Verify Email</a>";
+
+            $mail->send();
+        } catch (Exception $e) {
+            error_log("Message could not be sent. Mailer Error: {$mail->ErrorInfo}");
+        }
+    }
+
+    public static function verifyEmail() {
+        $userId = Flight::request()->query['user'];
+
+        $pdo = Database::getInstance()->getConnection();
+        $stmt = $pdo->prepare("UPDATE users SET email_verified = 1 WHERE id = ?");
+        $stmt->execute([$userId]);
+
+        Flight::json(['message' => 'Email verified successfully!']);
     }
 }

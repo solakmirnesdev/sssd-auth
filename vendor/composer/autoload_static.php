@@ -15,12 +15,20 @@ class ComposerStaticInit889ee12c9dae18c00288e1515de54769
         array (
             'Solakmirnes\\SssdAuth\\' => 21,
         ),
+        'P' => 
+        array (
+            'PHPMailer\\PHPMailer\\' => 20,
+        ),
     );
 
     public static $prefixDirsPsr4 = array (
         'Solakmirnes\\SssdAuth\\' => 
         array (
             0 => __DIR__ . '/../..' . '/src',
+        ),
+        'PHPMailer\\PHPMailer\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/phpmailer/phpmailer/src',
         ),
     );
 
