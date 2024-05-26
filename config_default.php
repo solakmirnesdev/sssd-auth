@@ -15,7 +15,7 @@ define('SMTP_PASSWORD', '2d778308ff5ab9');
 define('SMTP_PORT', '2525');
 define('SMTP_ENCRYPTION', 'tls');
 
-define('HCAPTCHA_SERVER_SECRET', 'your_hcaptcha_server_secret');
-define('HCAPTCHA_SITE_KEY', 'your_hcaptcha_site_key');
+define('HCAPTCHA_SERVER_SECRET', 'ES_1e3c6f59695e4ebb88c140ccb8ea1c65');
+define('HCAPTCHA_SITE_KEY', '4a54ced3-d5d6-436a-939d-e110976a7018');
 
 define('JWT_SECRET', 'somesecret');

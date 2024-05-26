@@ -29,11 +29,13 @@ $database = Database::getInstance([
 Flight::map('jwtAuth', 'jwtAuth');
 
 /**
- * Include routes.
+ * Include route files.
  *
- * This includes the routes file which defines all the application routes.
+ * The web.php file defines the routes for the web pages,
+ * and the api.php file defines the routes for the API endpoints.
  */
-require '../src/routes/routes.php';
+require '../src/routes/web.php';
+require '../src/routes/api.php';
 
 /**
  * Start the application.
