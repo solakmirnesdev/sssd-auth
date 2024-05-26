@@ -1,14 +1,18 @@
 <?php
 
+namespace Solakmirnes\SssdAuth;
+
+use PDO;
+
 class Database {
     private static $instance = null;
     private $pdo;
 
     private function __construct() {
-        $host = 'your_host';
-        $db = 'your_database';
-        $user = 'your_username';
-        $pass = 'your_password';
+        $host = 'localhost';
+        $db = 'sssd_auth';
+        $user = 'root';
+        $pass = 'Supermar!o1';
         $charset = 'utf8mb4';
 
         $dsn = "mysql:host=$host;dbname=$db;charset=$charset";

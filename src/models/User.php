@@ -2,7 +2,7 @@
 
 namespace Solakmirnes\SssdAuth\Models;
 
-use Database;
+use Solakmirnes\SssdAuth\Database;
 
 class User {
     public static function create($fullName, $username, $password, $email, $phoneNumber) {
