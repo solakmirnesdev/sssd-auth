@@ -35,3 +35,30 @@ Flight::route('POST /login', ['Solakmirnes\SssdAuth\Controllers\UserController',
  * @route GET /verify
  */
 Flight::route('GET /verify', ['Solakmirnes\SssdAuth\Controllers\UserController', 'verifyEmail']);
+
+/**
+ * Password reset request route.
+ *
+ * This route handles password reset requests. It calls the `forgotPassword` method in the `UserController`.
+ *
+ * @route POST /forgot-password
+ */
+Flight::route('POST /forgot-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'forgotPassword']);
+
+/**
+ * Password reset route.
+ *
+ * This route handles password resets. It calls the `resetPassword` method in the `UserController`.
+ *
+ * @route POST /reset-password
+ */
+Flight::route('POST /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'resetPassword']);
+
+/**
+ * Password reset form route.
+ *
+ * This route displays the password reset form. It calls the `showResetForm` method in the `UserController`.
+ *
+ * @route GET /reset-password
+ */
+Flight::route('GET /reset-password', ['Solakmirnes\SssdAuth\Controllers\UserController', 'showResetForm']);

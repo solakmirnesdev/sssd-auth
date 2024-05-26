@@ -8,6 +8,9 @@ use Solakmirnes\SssdAuth\Database;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+/**
+ * UserController class for managing user-related actions.
+ */
 class UserController {
 
     /**
@@ -22,59 +25,49 @@ class UserController {
     public static function register() {
         $data = Flight::request()->data;
 
-        // Validate full name
         if (empty($data->full_name)) {
             Flight::json(['error' => 'Full name is required'], 400);
             return;
         }
 
-        // Validate username
         if (empty($data->username) || strlen($data->username) <= 3 || !ctype_alnum($data->username)) {
             Flight::json(['error' => 'Invalid username'], 400);
             return;
         }
 
-        // Validate against reserved names
         $reservedNames = ['admin', 'root', 'system'];
         if (in_array(strtolower($data->username), $reservedNames)) {
             Flight::json(['error' => 'Username is reserved'], 400);
             return;
         }
 
-        // Validate password
         if (empty($data->password) || strlen($data->password) < 8) {
             Flight::json(['error' => 'Password must be at least 8 characters long'], 400);
             return;
         }
 
-        // Check if password has been pwned
         if (self::isPasswordPwned($data->password)) {
             Flight::json(['error' => 'Password has been compromised in a data breach'], 400);
             return;
         }
 
-        // Validate email format
         if (!filter_var($data->email, FILTER_VALIDATE_EMAIL)) {
             Flight::json(['error' => 'Invalid email address'], 400);
             return;
         }
 
-        // Validate phone number format
         if (!self::isValidPhoneNumber($data->phone_number)) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
         }
 
-        // Check if username or email already exists
         if (User::findByUsernameOrEmail($data->username, $data->email)) {
             Flight::json(['error' => 'Username or email already exists'], 400);
             return;
         }
 
-        // Create user
         $userId = User::create($data->full_name, $data->username, $data->password, $data->email, $data->phone_number);
 
-        // Send confirmation email
         self::sendConfirmationEmail($data->email, $userId);
 
         Flight::json(['message' => 'Registration successful! Please check your email to verify your account.']);
@@ -118,7 +111,6 @@ class UserController {
     private static function sendConfirmationEmail($email, $userId) {
         $mail = new PHPMailer(true);
         try {
-            // Server settings for Mailtrap
             $mail->isSMTP();
             $mail->Host = 'sandbox.smtp.mailtrap.io';
             $mail->SMTPAuth = true;
@@ -127,11 +119,9 @@ class UserController {
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = 2525;
 
-            // Recipients
             $mail->setFrom('no-reply@example.com', 'Mailer');
             $mail->addAddress($email);
 
-            // Content
             $mail->isHTML(true);
             $mail->Subject = 'Email Verification';
             $mail->Body    = "Please click on the following link to verify your email: <a href='http://localhost:8000/verify?user=$userId'>Verify Email</a>";
@@ -174,7 +164,6 @@ class UserController {
 
         $data = Flight::request()->data;
 
-        // Validating input
         if (empty($data->username) && empty($data->email)) {
             Flight::json(['error' => 'Username or email is required'], 400);
             return;
@@ -184,12 +173,10 @@ class UserController {
             return;
         }
 
-        // Initialize failed attempts if not set
         if (!isset($_SESSION['failed_attempts'])) {
             $_SESSION['failed_attempts'] = 0;
         }
 
-        // Re-enable CAPTCHA check after 3 failed attempts
         if ($_SESSION['failed_attempts'] >= 3) {
             if (empty($data->captcha) || $data->captcha !== 'expected-captcha-value') {
                 Flight::json(['error' => 'CAPTCHA verification required'], 403);
@@ -197,7 +184,6 @@ class UserController {
             }
         }
 
-        // Fetching user by username or email
         $user = User::findByUsernameOrEmail($data->username, $data->email);
         if (!$user) {
             $_SESSION['failed_attempts']++;
@@ -205,23 +191,137 @@ class UserController {
             return;
         }
 
-        // Verifying password
         if (!password_verify($data->password, $user['password'])) {
             $_SESSION['failed_attempts']++;
             Flight::json(['error' => 'Invalid username/email or password (Password mismatch)'], 400);
             return;
         }
 
-        // Check if email is verified
         if (!$user['email_verified']) {
             Flight::json(['error' => 'Please verify your email before logging in'], 400);
             return;
         }
 
-        // Reset failed attempts on successful login
         $_SESSION['failed_attempts'] = 0;
 
-        // Generate a token for the user session (for simplicity, just a message here)
         Flight::json(['message' => 'Login successful!']);
+    }
+
+    /**
+     * Handle password reset request.
+     *
+     * This method processes the password reset request, generates a reset token,
+     * and sends a password reset email to the user.
+     *
+     * @return void
+     */
+    public static function forgotPassword() {
+        $data = Flight::request()->data;
+
+        if (empty($data->email)) {
+            Flight::json(['error' => 'Email is required'], 400);
+            return;
+        }
+
+        $user = User::findByEmail($data->email);
+        if (!$user) {
+            Flight::json(['error' => 'Email not found'], 404);
+            return;
+        }
+
+        $resetToken = bin2hex(random_bytes(16));
+        $expiryTime = time() + 300; // 5 minutes expiry
+
+        User::savePasswordResetToken($user['id'], $resetToken, $expiryTime);
+
+        self::sendPasswordResetEmail($data->email, $resetToken);
+
+        Flight::json(['message' => 'Password reset email sent']);
+    }
+
+    /**
+     * Send a password reset email to the user.
+     *
+     * This method sends an email containing a password reset link to the user's email address.
+     *
+     * @param string $email The user's email address.
+     * @param string $token The password reset token.
+     * @return void
+     */
+    private static function sendPasswordResetEmail($email, $token) {
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'sandbox.smtp.mailtrap.io';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'cb215d12ba5592';
+            $mail->Password = '2d778308ff5ab9';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 2525;
+
+            $mail->setFrom('no-reply@example.com', 'Mailer');
+            $mail->addAddress($email);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'Password Reset';
+            $mail->Body    = "Click the following link to reset your password: <a href='http://localhost:8000/reset-password?token=$token'>Reset Password</a>";
+
+            $mail->send();
+        } catch (Exception $e) {
+            error_log("Message could not be sent. Mailer Error: {$mail->ErrorInfo}");
+        }
+    }
+
+    /**
+     * Handle password reset.
+     *
+     * This method processes the password reset form submission,
+     * validates the reset token, and updates the user's password.
+     *
+     * @return void
+     */
+    public static function resetPassword() {
+        $data = Flight::request()->data;
+
+        if (empty($data->token)) {
+            Flight::json(['error' => 'Token is required'], 400);
+            return;
+        }
+        if (empty($data->new_password)) {
+            Flight::json(['error' => 'New password is required'], 400);
+            return;
+        }
+
+        $user = User::findByResetToken($data->token);
+        if (!$user || $user['reset_token_expiry'] < time()) {
+            Flight::json(['error' => 'Invalid or expired token'], 400);
+            return;
+        }
+
+        $newPasswordHash = password_hash($data->new_password, PASSWORD_DEFAULT);
+        User::updatePassword($user['id'], $newPasswordHash);
+        User::clearResetToken($user['id']);
+
+        Flight::json(['message' => 'Password reset successful!']);
+    }
+
+    /**
+     * Display the password reset form.
+     *
+     * This method generates and displays an HTML form for the user to reset their password.
+     * The form includes a hidden input field for the reset token and a password input field for the new password.
+     * The form is submitted to the /reset-password endpoint.
+     *
+     * @return void
+     */
+    public static function showResetForm() {
+        $token = Flight::request()->query['token'];
+
+        echo "<form method='POST' action='/reset-password'>
+            <input type='hidden' name='token' value='$token'>
+            <label for='new_password'>New Password:</label>
+            <input type='password' name='new_password' id='new_password' required>
+            <button type='submit'>Reset Password</button>
+          </form>";
     }
 }
