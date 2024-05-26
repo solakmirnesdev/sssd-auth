@@ -1,0 +1,21 @@
+{
+    "name": "solakmirnes/sssd-auth",
+    "description": "A secure software system project.",
+    "type": "project",
+    "require": {
+        "mikecao/flight": "^3.9"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Solakmirnes\\SssdAuth\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Mirnes Solak",
+            "email": "solakmirnes.dev@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable"
+}
