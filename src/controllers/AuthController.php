@@ -7,21 +7,13 @@ use Solakmirnes\SssdAuth\Models\User;
 use Solakmirnes\SssdAuth\Database;
 use Firebase\JWT\JWT;
 use Exception;
+use OTPHP\TOTP;
 
 /**
  * AuthController class for managing authentication-related actions.
  */
 class AuthController {
 
-    /**
-     * Handle user registration.
-     *
-     * This method processes the registration data, validates it,
-     * and creates a new user if all validations pass.
-     * It then sends a confirmation email to the user.
-     *
-     * @return void
-     */
     /**
      * Handle user registration.
      *
@@ -50,69 +42,61 @@ class AuthController {
         }
 
         // Proceed with registration logic...
-        // Check if full name is provided
         if (empty($data['full_name'])) {
             Flight::json(['error' => 'Full name is required'], 400);
             return;
         }
 
-        // Validate username
         if (empty($data['username']) || strlen($data['username']) <= 3 || !ctype_alnum($data['username'])) {
             Flight::json(['error' => 'Invalid username'], 400);
             return;
         }
 
         $reservedNames = ['admin', 'root', 'system'];
-        // Check if username is not reserved
         if (in_array(strtolower($data['username']), $reservedNames)) {
             Flight::json(['error' => 'Username is reserved'], 400);
             return;
         }
 
-        // Validate password length
         if (empty($data['password']) || strlen($data['password']) < 8) {
             Flight::json(['error' => 'Password must be at least 8 characters long'], 400);
             return;
         }
 
-        // Check if password has been compromised in a data breach
         if (ValidationController::isPasswordPwned($data['password'])) {
             Flight::json(['error' => 'Password has been compromised in a data breach'], 400);
             return;
         }
 
-        // Validate email address format
         if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             Flight::json(['error' => 'Invalid email address'], 400);
             return;
         }
 
-        // Check if email domain extension is valid
         if (!ValidationController::isValidDomainExtension($data['email'])) {
             Flight::json(['error' => 'Invalid email domain extension'], 400);
             return;
         }
 
-        // Check if email domain has valid MX records
         if (!ValidationController::hasValidMXRecords($data['email'])) {
             Flight::json(['error' => 'Email domain does not have valid MX records'], 400);
             return;
         }
 
-        // Validate phone number format
         if (!ValidationController::isValidPhoneNumber($data['phone_number'])) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
         }
 
-        // Check if username or email already exists
         if (User::findByUsernameOrEmail($data['username'], $data['email'])) {
             Flight::json(['error' => 'Username or email already exists'], 400);
             return;
         }
 
-        // Create new user
+        // Create new user and generate 2FA secret
         $userId = User::create($data['full_name'], $data['username'], $data['password'], $data['email'], $data['phone_number']);
+        $totp = TOTP::create();
+        User::updateTOTPSecret($userId, $totp->getSecret());
 
         // Send confirmation email
         EmailController::sendConfirmationEmail($data['email'], $userId);
@@ -148,74 +132,96 @@ class AuthController {
         try {
             $data = Flight::request()->data;
 
-            // Check if username or email is provided
             if (empty($data->username) && empty($data->email)) {
                 Flight::json(['error' => 'Username or email is required'], 400);
                 return;
             }
 
-            // Check if password is provided
             if (empty($data->password)) {
                 Flight::json(['error' => 'Password is required'], 400);
                 return;
             }
 
-            // Initialize failed attempts if not set
             if (!isset($_SESSION['failed_attempts'])) {
                 $_SESSION['failed_attempts'] = 0;
             }
 
-            // Check if CAPTCHA is required after 3 failed attempts
             if ($_SESSION['failed_attempts'] >= 3) {
                 if (empty($data['h-captcha-response']) || !self::verifyCaptcha($data['h-captcha-response'])) {
-                    Flight::json(['error' => 'CAPTCHA verification failed'], 403);
+                    Flight::json(['error' => 'CAPTCHA verification failed', 'captcha_needed' => true], 403);
                     return;
                 }
             }
 
-            // Find user by username or email
             $user = User::findByUsernameOrEmail($data->username, $data->email);
             if (!$user) {
                 self::logFailedAttempt();
-                Flight::json(['error' => 'Invalid username/email or password'], 400);
+                Flight::json(['error' => 'Invalid username/email or password', 'captcha_needed' => $_SESSION['failed_attempts'] >= 3], 400);
                 return;
             }
 
-            // Verify password
             if (!password_verify($data->password, $user['password'])) {
                 self::logFailedAttempt();
-                Flight::json(['error' => 'Invalid username/email or password'], 400);
+                Flight::json(['error' => 'Invalid username/email or password', 'captcha_needed' => $_SESSION['failed_attempts'] >= 3], 400);
                 return;
             }
 
-            // Check if email is verified
             if (!$user['email_verified']) {
                 Flight::json(['error' => 'Please verify your email before logging in'], 400);
                 return;
             }
 
-            // Reset failed attempts after successful login
             $_SESSION['failed_attempts'] = 0;
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['2fa_required'] = true;
 
-            // Create JWT token
-            $payload = [
-                'iss' => "http://localhost", // Issuer
-                'aud' => "http://localhost", // Audience
-                'iat' => time(), // Issued At
-                'nbf' => time(), // Not Before
-                'exp' => time() + 3600, // Expiration Time
-                'data' => [
-                    'id' => $user['id'],
-                    'username' => $user['username']
-                ]
-            ];
-
-            $jwt = JWT::encode($payload, JWT_SECRET, 'HS256');
-
-            Flight::json(['message' => 'Login successful!', 'token' => $jwt]);
+            Flight::json(['message' => 'First step login successful! Please complete 2FA verification.']);
         } catch (Exception $e) {
             Flight::json(['error' => 'Internal server error'], 500);
         }
+    }
+
+    /**
+     * Verify 2FA code.
+     *
+     * This method verifies the 2FA code provided by the user.
+     * If the code is correct, it completes the login process.
+     *
+     * @return void
+     */
+    public static function verify2FA() {
+        session_start();
+
+        if (!isset($_SESSION['user_id']) || !$_SESSION['2fa_required']) {
+            Flight::json(['error' => 'Unauthorized'], 401);
+            return;
+        }
+
+        $data = Flight::request()->data;
+        $user = User::findById($_SESSION['user_id']);
+
+        if (empty($data['totp_code']) || !self::verifyTOTP($user['totp_secret'], $data['totp_code'])) {
+            Flight::json(['error' => 'Invalid TOTP code'], 400);
+            return;
+        }
+
+        $_SESSION['2fa_required'] = false;
+
+        $payload = [
+            'iss' => "http://localhost",
+            'aud' => "http://localhost",
+            'iat' => time(),
+            'nbf' => time(),
+            'exp' => time() + 3600,
+            'data' => [
+                'id' => $user['id'],
+                'username' => $user['username']
+            ]
+        ];
+
+        $jwt = JWT::encode($payload, JWT_SECRET, 'HS256');
+
+        Flight::json(['message' => '2FA verification successful!', 'token' => $jwt]);
     }
 
     /**
@@ -228,10 +234,19 @@ class AuthController {
             $_SESSION['failed_attempts'] = 0;
         }
         $_SESSION['failed_attempts']++;
-
-        // Optionally, you could also log this in the database for more persistent tracking.
     }
 
+    /**
+     * Verify TOTP using the provided code.
+     *
+     * @param string $secret The TOTP secret.
+     * @param string $code The TOTP code provided by the user.
+     * @return bool True if the TOTP code is valid, false otherwise.
+     */
+    private static function verifyTOTP($secret, $code) {
+        $totp = TOTP::create($secret);
+        return $totp->verify($code);
+    }
 
     /**
      * Verify a user's email address.
@@ -262,27 +277,22 @@ class AuthController {
     public static function forgotPassword() {
         $data = Flight::request()->data;
 
-        // Check if email is provided
         if (empty($data->email)) {
             Flight::json(['error' => 'Email is required'], 400);
             return;
         }
 
-        // Find user by email
         $user = User::findByEmail($data->email);
         if (!$user) {
             Flight::json(['error' => 'Email not found'], 404);
             return;
         }
 
-        // Generate reset token and set expiry time
         $resetToken = bin2hex(random_bytes(16));
-        $expiryTime = time() + 300; // 5 minutes expiry
+        $expiryTime = time() + 300;
 
-        // Save reset token to database
         User::savePasswordResetToken($user['id'], $resetToken, $expiryTime);
 
-        // Send password reset email
         EmailController::sendPasswordResetEmail($data->email, $resetToken);
 
         Flight::json(['message' => 'Password reset email sent']);
@@ -299,7 +309,6 @@ class AuthController {
     public static function resetPassword() {
         $data = Flight::request()->data;
 
-        // Check if token and new password are provided
         if (empty($data->token)) {
             Flight::json(['error' => 'Token is required'], 400);
             return;
@@ -309,18 +318,15 @@ class AuthController {
             return;
         }
 
-        // Find user by reset token
         $user = User::findByResetToken($data->token);
         if (!$user || $user['reset_token_expiry'] < time()) {
             Flight::json(['error' => 'Invalid or expired token'], 400);
             return;
         }
 
-        // Hash new password and update user's password
         $newPasswordHash = password_hash($data->new_password, PASSWORD_DEFAULT);
         User::updatePassword($user['id'], $newPasswordHash);
 
-        // Clear reset token
         User::clearResetToken($user['id']);
 
         Flight::json(['message' => 'Password reset successful!']);
