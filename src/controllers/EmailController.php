@@ -35,7 +35,7 @@ class EmailController {
 
             $mail->isHTML(true);
             $mail->Subject = 'Email Verification';
-            $verificationUrl = 'http://localhost:8000/verify?user=' . $userId;
+            $verificationUrl = 'http://localhost:8000/api/verify?user=' . $userId;
             $mail->Body    = "Please click on the following link to verify your email: <a href='$verificationUrl'>Verify Email</a>";
 
             $mail->send();
