@@ -8,9 +8,8 @@ document.addEventListener('DOMContentLoaded', function () {
             data[key] = value;
         });
 
-        // Include hCaptcha response if visible
         const captchaContainer = document.getElementById('captcha-container');
-        if (captchaContainer.style.display === 'block') {
+        if (captchaContainer && captchaContainer.style.display === 'block') {
             data['h-captcha-response'] = document.querySelector('[name="h-captcha-response"]').value;
         }
 
