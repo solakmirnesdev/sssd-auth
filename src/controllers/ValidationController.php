@@ -80,4 +80,31 @@ class ValidationController {
         $domain = explode('@', $email)[1];
         return checkdnsrr($domain, 'MX');
     }
+
+    /**
+     * Verify the hCaptcha response token.
+     *
+     * @param string $token The hCaptcha response token.
+     * @return bool True if the token is valid, false otherwise.
+     */
+    public static function verifyCaptcha($token) {
+        $url = 'https://hcaptcha.com/siteverify';
+        $data = [
+            'secret' => HCAPTCHA_SERVER_SECRET,
+            'response' => $token
+        ];
+
+        $options = [
+            'http' => [
+                'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+                'method'  => 'POST',
+                'content' => http_build_query($data),
+            ],
+        ];
+        $context  = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
+        $result = json_decode($response);
+
+        return $result && $result->success;
+    }
 }

@@ -24,6 +24,12 @@ class AuthController {
     public static function register() {
         $data = Flight::request()->data;
 
+        // Verify hCaptcha
+        if (empty($data->hcaptcha_response) || !ValidationController::verifyCaptcha($data->hcaptcha_response)) {
+            Flight::json(['error' => 'Captcha verification failed'], 400);
+            return;
+        }
+
         // Check if full name is provided
         if (empty($data->full_name)) {
             Flight::json(['error' => 'Full name is required'], 400);
@@ -104,55 +110,79 @@ class AuthController {
      * @return void
      */
     public static function login() {
-        $data = Flight::request()->data;
+        session_start(); // Start session to track login attempts
 
-        // Check if username or email is provided
-        if (empty($data->username) && empty($data->email)) {
-            Flight::json(['error' => 'Username or email is required'], 400);
-            return;
+        try {
+            $data = Flight::request()->data;
+
+            // Check if username or email is provided
+            if (empty($data->username) && empty($data->email)) {
+                Flight::json(['error' => 'Username or email is required'], 400);
+                return;
+            }
+
+            // Check if password is provided
+            if (empty($data->password)) {
+                Flight::json(['error' => 'Password is required'], 400);
+                return;
+            }
+
+            // Initialize failed attempts if not set
+            if (!isset($_SESSION['failed_attempts'])) {
+                $_SESSION['failed_attempts'] = 0;
+            }
+
+            // Check if CAPTCHA is required after 3 failed attempts
+            if ($_SESSION['failed_attempts'] >= 3) {
+                if (empty($data->hcaptcha_response) || !ValidationController::verifyCaptcha($data->hcaptcha_response)) {
+                    Flight::json(['error' => 'CAPTCHA verification failed'], 403);
+                    return;
+                }
+            }
+
+            // Find user by username or email
+            $user = User::findByUsernameOrEmail($data->username, $data->email);
+            if (!$user) {
+                self::logFailedAttempt();
+                Flight::json(['error' => 'Invalid username/email or password'], 400);
+                return;
+            }
+
+            // Verify password
+            if (!password_verify($data->password, $user['password'])) {
+                self::logFailedAttempt();
+                Flight::json(['error' => 'Invalid username/email or password'], 400);
+                return;
+            }
+
+            // Check if email is verified
+            if (!$user['email_verified']) {
+                Flight::json(['error' => 'Please verify your email before logging in'], 400);
+                return;
+            }
+
+            // Reset failed attempts after successful login
+            $_SESSION['failed_attempts'] = 0;
+
+            // Create JWT token
+            $payload = [
+                'iss' => "http://localhost", // Issuer
+                'aud' => "http://localhost", // Audience
+                'iat' => time(), // Issued At
+                'nbf' => time(), // Not Before
+                'exp' => time() + 3600, // Expiration Time
+                'data' => [
+                    'id' => $user['id'],
+                    'username' => $user['username']
+                ]
+            ];
+
+            $jwt = JWT::encode($payload, JWT_SECRET, 'HS256');
+
+            Flight::json(['message' => 'Login successful!', 'token' => $jwt]);
+        } catch (Exception $e) {
+            Flight::json(['error' => 'Internal server error'], 500);
         }
-
-        // Check if password is provided
-        if (empty($data->password)) {
-            Flight::json(['error' => 'Password is required'], 400);
-            return;
-        }
-
-        // Find user by username or email
-        $user = User::findByUsernameOrEmail($data->username, $data->email);
-        if (!$user) {
-            Flight::json(['error' => 'Invalid username/email or password'], 400);
-            return;
-        }
-
-        // Verify password
-        if (!password_verify($data->password, $user['password'])) {
-            Flight::json(['error' => 'Invalid username/email or password'], 400);
-            return;
-        }
-
-        // Check if email is verified
-        if (!$user['email_verified']) {
-            Flight::json(['error' => 'Please verify your email before logging in'], 400);
-            return;
-        }
-
-        // Create JWT token
-        $payload = [
-            'iss' => "http://localhost", // Issuer
-            'aud' => "http://localhost", // Audience
-            'iat' => time(), // Issued At
-            'nbf' => time(), // Not Before
-            'exp' => time() + 3600, // Expiration Time
-            'data' => [
-                'id' => $user['id'],
-                'username' => $user['username']
-            ]
-        ];
-
-        $jwt = JWT::encode($payload, JWT_SECRET, 'HS256');
-
-        Flight::json(['message' => 'Login successful!', 'token' => $jwt]);
     }
 
     /**

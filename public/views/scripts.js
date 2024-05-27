@@ -12,15 +12,19 @@
 async function handleSubmit(event, formId, endpoint) {
     event.preventDefault();
 
-    // Collect form data
     let formData = new FormData(document.getElementById(formId));
     let data = {};
     formData.forEach((value, key) => {
         data[key] = value;
     });
 
+    // Add hCaptcha response token to the data
+    let hcaptchaResponse = document.querySelector('.h-captcha-response');
+    if (hcaptchaResponse) {
+        data['hcaptcha_response'] = hcaptchaResponse.value;
+    }
+
     try {
-        // Send POST request to the endpoint with form data
         let response = await fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -29,7 +33,6 @@ async function handleSubmit(event, formId, endpoint) {
             body: JSON.stringify(data)
         });
 
-        // Process the server response
         let result = await response.json();
         let messageElement = document.getElementById('message');
         if (response.ok) {
