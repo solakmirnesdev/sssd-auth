@@ -8,9 +8,6 @@ use Solakmirnes\SssdAuth\Database;
 
 /**
  * Initialize the database connection.
- *
- * This initializes the singleton instance of the Database class using
- * the configuration values defined in config_default.php.
  */
 $database = Database::getInstance([
     'host' => DB_HOST,
@@ -22,24 +19,16 @@ $database = Database::getInstance([
 
 /**
  * Map the JWT authentication middleware.
- *
- * This maps the 'jwtAuth' middleware function to Flight,
- * making it available for route protection.
  */
 Flight::map('jwtAuth', 'jwtAuth');
 
 /**
- * Include route files.
- *
- * The web.php file defines the routes for the web pages,
- * and the api.php file defines the routes for the API endpoints.
+ * Include routes.
  */
-require '../src/routes/web.php';
-require '../src/routes/api.php';
+require '../src/routes/web.php'; // Web routes
+require '../src/routes/api.php'; // API routes
 
 /**
  * Start the application.
- *
- * This starts the Flight PHP application, making it ready to handle requests.
  */
 Flight::start();

@@ -1,13 +1,12 @@
 /**
- * Handles form submission asynchronously.
+ * Handle form submission.
  *
- * This function prevents the default form submission behavior,
- * collects the form data, sends a POST request to the specified endpoint,
- * and displays the server response message on the page.
+ * This function handles the form submission by preventing the default form submission,
+ * collecting form data, sending an async request to the server, and handling the response.
  *
  * @param {Event} event - The form submission event.
  * @param {string} formId - The ID of the form being submitted.
- * @param {string} endpoint - The API endpoint to send the form data to.
+ * @param {string} endpoint - The endpoint to which the form data is submitted.
  */
 async function handleSubmit(event, formId, endpoint) {
     event.preventDefault();
@@ -18,14 +17,11 @@ async function handleSubmit(event, formId, endpoint) {
         data[key] = value;
     });
 
-    // Add hCaptcha response token to the data
-    let hcaptchaResponse = document.querySelector('.h-captcha-response');
-    if (hcaptchaResponse) {
-        data['hcaptcha_response'] = hcaptchaResponse.value;
-    }
+    // Get the hCaptcha response token
+    data['h-captcha-response'] = document.querySelector('[name="h-captcha-response"]').value;
 
     try {
-        let response = await fetch(endpoint, {
+        let response = await fetch(endpoint.replace('localhost', '127.0.0.1'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

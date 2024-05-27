@@ -6,6 +6,7 @@ use Flight;
 use Solakmirnes\SssdAuth\Models\User;
 use Solakmirnes\SssdAuth\Database;
 use Firebase\JWT\JWT;
+use Exception;
 
 /**
  * AuthController class for managing authentication-related actions.
@@ -21,83 +22,115 @@ class AuthController {
      *
      * @return void
      */
+    /**
+     * Handle user registration.
+     *
+     * This method processes the registration data, validates it,
+     * and creates a new user if all validations pass.
+     * It then sends a confirmation email to the user.
+     *
+     * @return void
+     */
     public static function register() {
-        $data = Flight::request()->data;
+        $data = Flight::request()->data->getData();
 
-        // Verify hCaptcha
-        if (empty($data->hcaptcha_response) || !ValidationController::verifyCaptcha($data->hcaptcha_response)) {
-            Flight::json(['error' => 'Captcha verification failed'], 400);
+        // Verify Captcha
+        if (isset($data['h-captcha-response'])) {
+            $captchaResponse = $data['h-captcha-response'];
+            $verifyUrl = 'https://hcaptcha.com/siteverify';
+            $response = file_get_contents($verifyUrl . '?secret=' . HCAPTCHA_SERVER_SECRET . '&response=' . $captchaResponse);
+            $responseData = json_decode($response);
+            if (!$responseData->success) {
+                Flight::json(['error' => 'Captcha verification failed'], 403);
+                return;
+            }
+        } else {
+            Flight::json(['error' => 'Captcha is required'], 403);
             return;
         }
 
+        // Proceed with registration logic...
         // Check if full name is provided
-        if (empty($data->full_name)) {
+        if (empty($data['full_name'])) {
             Flight::json(['error' => 'Full name is required'], 400);
             return;
         }
 
         // Validate username
-        if (empty($data->username) || strlen($data->username) <= 3 || !ctype_alnum($data->username)) {
+        if (empty($data['username']) || strlen($data['username']) <= 3 || !ctype_alnum($data['username'])) {
             Flight::json(['error' => 'Invalid username'], 400);
             return;
         }
 
         $reservedNames = ['admin', 'root', 'system'];
         // Check if username is not reserved
-        if (in_array(strtolower($data->username), $reservedNames)) {
+        if (in_array(strtolower($data['username']), $reservedNames)) {
             Flight::json(['error' => 'Username is reserved'], 400);
             return;
         }
 
         // Validate password length
-        if (empty($data->password) || strlen($data->password) < 8) {
+        if (empty($data['password']) || strlen($data['password']) < 8) {
             Flight::json(['error' => 'Password must be at least 8 characters long'], 400);
             return;
         }
 
         // Check if password has been compromised in a data breach
-        if (ValidationController::isPasswordPwned($data->password)) {
+        if (ValidationController::isPasswordPwned($data['password'])) {
             Flight::json(['error' => 'Password has been compromised in a data breach'], 400);
             return;
         }
 
         // Validate email address format
-        if (!filter_var($data->email, FILTER_VALIDATE_EMAIL)) {
+        if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             Flight::json(['error' => 'Invalid email address'], 400);
             return;
         }
 
         // Check if email domain extension is valid
-        if (!ValidationController::isValidDomainExtension($data->email)) {
+        if (!ValidationController::isValidDomainExtension($data['email'])) {
             Flight::json(['error' => 'Invalid email domain extension'], 400);
             return;
         }
 
         // Check if email domain has valid MX records
-        if (!ValidationController::hasValidMXRecords($data->email)) {
+        if (!ValidationController::hasValidMXRecords($data['email'])) {
             Flight::json(['error' => 'Email domain does not have valid MX records'], 400);
             return;
         }
 
         // Validate phone number format
-        if (!ValidationController::isValidPhoneNumber($data->phone_number)) {
+        if (!ValidationController::isValidPhoneNumber($data['phone_number'])) {
             Flight::json(['error' => 'Invalid phone number'], 400);
             return;
         }
 
         // Check if username or email already exists
-        if (User::findByUsernameOrEmail($data->username, $data->email)) {
+        if (User::findByUsernameOrEmail($data['username'], $data['email'])) {
             Flight::json(['error' => 'Username or email already exists'], 400);
             return;
         }
 
         // Create new user
-        $userId = User::create($data->full_name, $data->username, $data->password, $data->email, $data->phone_number);
+        $userId = User::create($data['full_name'], $data['username'], $data['password'], $data['email'], $data['phone_number']);
 
         // Send confirmation email
-        EmailController::sendConfirmationEmail($data->email, $userId);
+        EmailController::sendConfirmationEmail($data['email'], $userId);
 
         Flight::json(['message' => 'Registration successful! Please check your email to verify your account.']);
+    }
+
+    /**
+     * Verify CAPTCHA using the provided response.
+     *
+     * @param string $captchaResponse The CAPTCHA response from the client.
+     * @return bool True if the CAPTCHA is valid, false otherwise.
+     */
+    private static function verifyCaptcha($captchaResponse) {
+        $secret = HCAPTCHA_SERVER_SECRET;
+        $response = file_get_contents("https://hcaptcha.com/siteverify?secret={$secret}&response={$captchaResponse}");
+        $responseData = json_decode($response);
+        return $responseData->success;
     }
 
     /**
@@ -134,7 +167,7 @@ class AuthController {
 
             // Check if CAPTCHA is required after 3 failed attempts
             if ($_SESSION['failed_attempts'] >= 3) {
-                if (empty($data->hcaptcha_response) || !ValidationController::verifyCaptcha($data->hcaptcha_response)) {
+                if (empty($data['h-captcha-response']) || !self::verifyCaptcha($data['h-captcha-response'])) {
                     Flight::json(['error' => 'CAPTCHA verification failed'], 403);
                     return;
                 }
@@ -184,6 +217,21 @@ class AuthController {
             Flight::json(['error' => 'Internal server error'], 500);
         }
     }
+
+    /**
+     * Log a failed login attempt and increment the failed attempts counter.
+     *
+     * @return void
+     */
+    private static function logFailedAttempt() {
+        if (!isset($_SESSION['failed_attempts'])) {
+            $_SESSION['failed_attempts'] = 0;
+        }
+        $_SESSION['failed_attempts']++;
+
+        // Optionally, you could also log this in the database for more persistent tracking.
+    }
+
 
     /**
      * Verify a user's email address.

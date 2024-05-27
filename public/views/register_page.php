@@ -6,7 +6,7 @@
 	<title>Register</title>
 	<link rel="stylesheet" href="/views/styles.css">
 	<script src="https://hcaptcha.com/1/api.js" async defer></script>
-	<script src="/scripts.js"></script>
+	<script src="/views/scripts.js" defer></script>
 </head>
 <body>
 <div class="container">
